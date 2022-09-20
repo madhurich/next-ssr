@@ -1,0 +1,107 @@
+getStaticProps is needed to pre render the pages on server side and the code written here is not
+seen my browser
+export async function getStaticProps() {
+  console.log('re-generating')
+  const filePath = path.join(process.cwd(), 'data/dummy-backend.json')
+  const jsonData = await fs.readFile(filePath)
+  const data = JSON.parse(jsonData)
+  if(!data) { // when no data found, this object is used to redirect to a destination path
+    return {
+      redirect: {
+        destination: '/no-data'
+      }
+    }
+  }
+  if(data.products.length === 0) {
+    return {
+      notFound: true
+    }
+  }
+  return {
+    props: { // it has to have props returned which in turn the component uses as props and can be used by it
+      products: data.products,
+    },
+    revalidate: 5,
+  }
+}
+
+in order to avoid the client side http requests, we use getStaticProps (meaning we can do this by using useEffect in the component itself
+by making a req to the dummy data file but again its not seen by SEO and may lead to consequences so we use getStaticProps)
+
+Incremental Static Generation (ISR)
+REVALIDATE prop "revalidate"
+this is an important prop offered by 'next' if there is some data changing and we want to show it in browser this can be used in production
+because in prod, once we build and deploy the available data within the dummy json is present, but in between if there is new data and want to show
+then it may not be seen by the browser, so "revalidate: 5" meaning 5 seconds will refresh the server for every 5 seconds to get the new data
+(but in development server this will happen for every new request meaning getStaticProps runs for every new req regardless of what number is given
+in re validate, but in PROD getStaticProps runs only after that time in seconds)
+
+getStaticPaths is needed to tell nextjs that what /id pages we wanted to pre render
+export async function getStaticPaths() {
+    return {
+        paths: [
+            {params: {id: 'p1'} },
+            {params: {id: 'p2'} },
+            {params: {id: 'p3'} },
+        ],
+        fallback: false
+    }
+}
+Above means that all the /p1, /p2, /p3 will be pre rendered before they are visited by the browser
+In some cases we dont want to pre render hundreds of available pages in that case we can just specify which paths we want to pre render
+and the rest will be loaded Just in time when they are visited
+
+Ex:
+export async function getStaticPaths() {
+    return {
+        paths: [
+            {params: {id: 'p2'} },
+        ],
+        fallback: true
+    }
+}
+only /p2 page will be pre rendered
+and when we click on links product 1 and product 3 then they we loaded at that time
+but when we type the url like http://localhost:3000/p3 it will show an error that the product is not available, because it takes time to 
+load just in that time so to avoid showing that error we can use below code to show loading text and show the page when available
+ if(!currentProduct) {
+        return <p>Loading...</p>
+    }
+
+FALLBACK property in getStaticPaths
+
+Instead of showing loading, we can also use fallback property as "blocked" to block showing the content and show only when available 
+but again it takes time to make that page available and show on browser
+
+export async function getStaticPaths() {
+    return {
+        paths: [
+            {params: {id: 'p2'} },
+        ],
+        fallback: 'blocking'
+    }
+}
+
+getServerSideProps
+this runs for every req from the browser, and we have access to req and res - can be used as is cannot be combined with getStaticPaths or getStaticProps
+export async function getServerSideProps(context) {
+    const { params, req, res } = context
+    console.log(req)
+    return {
+        props: {
+            username: 'mad'
+        }
+    }
+}
+
+getServerSideProps only renders on server side it does not pre render, when we run the build in prod mode with npm run build we can see that
+λ /[uid]                                 269 B          78.3 kB
+λ /user-profile                          276 B          78.3 kB
+
+the one with "lambda" are from server side but not pre rendered
+
+A Note About useSWR
+useSWR(<request-url>, (url) => fetch(url).then(res => res.json()))
+
+client side fetching and pre fetching 
+we can use useSWR and getStaticProps to make this happen with revalidate
